@@ -7,4 +7,5 @@
 
 ### Software Layout
 
-<img width="2362" height="1200" alt="image" src="https://github.com/user-attachments/assets/433d2fa8-bb10-46f5-8a6b-65984b5c468f" />
+<img width="884" height="442" alt="image" src="https://github.com/user-attachments/assets/70463a5d-c353-4157-b972-ba04d9f2c98e" />
+
