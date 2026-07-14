@@ -53,7 +53,7 @@ For the base station, I chose to avoid the loop task and instead used my own tas
 
 ### Tasks
 
-- Mode Check Task (Base Station):In command mode, the user can send start or halt commands to enable or disable motors. These commands are first placed on a queue, and a command task will periodically trigger to pop the first command off the queue and broadcast it to all UGVs using an ESP-NOW message. In telemetry mode, the user will be able to monitor telemetry such as orientation, accelerometer values, vehicle separation, and battery life from all UGVs. A UGV will place a telemetry packet on a queue, and a telemetry task will periodically trigger to pop off the first packet and send it to the base station via ESP-NOW.
+- Mode Check Task (Base Station): In command mode, the user can send start or halt commands to enable or disable motors. These commands are first placed on a queue, and a command task will periodically trigger to pop the first command off the queue and broadcast it to all UGVs using an ESP-NOW message. In telemetry mode, the user will be able to monitor telemetry such as orientation, accelerometer values, vehicle separation, and battery life from all UGVs. A UGV will place a telemetry packet on a queue, and a telemetry task will periodically trigger to pop off the first packet and send it to the base station via ESP-NOW.
 
 
 - Command Task (UGV and Base Station): This task will periodically trigger to execute a command from the command queue (UGV) or send a command from the command queue (Base Station)
