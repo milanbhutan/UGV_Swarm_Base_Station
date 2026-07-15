@@ -5,11 +5,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-
-struct telemetry{};
-
-
-struct command{};
+struct packet{
+uint8_t packet_type = 0;
+uint8_t command_type = 0;
+};
 
 
 void Command_Task(void *pCom_Params);
@@ -19,8 +18,6 @@ void Mode_Check_Task(void *pMode_Check_Params);
 TaskHandle_t Command_Task_ID = nullptr;
 TaskHandle_t Telemetry_Task_ID = nullptr;
 TaskHandle_t Mode_Check_ID = nullptr;
-
-//char CURRENT_MODE='x';
 
 enum Mode{
 COMMAND_MODE = 'c',
@@ -33,7 +30,16 @@ START_COMMAND = 's',
 HALT_COMMAND = 'h'
 };
 
+enum Packet_Type{
+COMMAND,
+TELEMETRY
+};
 
+packet *start_command;
+packet *halt_command;
+packet *message;
+
+QueueHandle_t Packet_Queue_ID = xQueueCreate(10 , sizeof(packet *));
 
 void setup() {
   Serial.begin(115200);
@@ -43,6 +49,19 @@ void setup() {
   constexpr UBaseType_t COMMAND_TASK_PRIORITY = 5;
   constexpr UBaseType_t TELEMETRY_TASK_PRIORITY = 5;
   constexpr UBaseType_t MODE_CHECK_TASK_PRIORITY = 3;
+
+
+  start_command = new packet();
+  start_command -> packet_type = COMMAND;
+  start_command -> command_type = START_COMMAND;
+
+  
+  halt_command = new packet();
+  halt_command -> packet_type = COMMAND;
+  halt_command -> command_type = HALT_COMMAND;
+  
+
+  message = new packet();
 
   xTaskCreate(
     Command_Task, 
@@ -80,7 +99,10 @@ void loop(){
 
 void Command_Task(void *pCom_Params){
   for(;;){
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    xQueueReceive(Packet_Queue_ID, message, portMAX_DELAY);
+    Serial.println(message->packet_type);
+    Serial.println(message->command_type);
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 
 }
@@ -105,6 +127,7 @@ void Mode_Check_Task(void *pMode_Check_Params){
               switch(Serial.read()){
                 case START_COMMAND:{
                   Serial.println("Sending Start Command");
+                  xQueueSend(Packet_Queue_ID, start_command, portMAX_DELAY);
                   break;
                 }
                 case HALT_COMMAND:{
