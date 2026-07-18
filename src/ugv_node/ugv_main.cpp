@@ -5,23 +5,20 @@
 #include <freeRTOS/FreeRTOS.h>
 #include <freeRTOS/task.h>
 
-void Command_Task(void *pvParams);
-void Telemetry_Task(void *pvParams);
+void Execute_Command_Task(void *pvParams);
+void Send_Telemetry_Task(void *pvParams);
 void Motor_Task(void *pvParams);
-void Command_Received_Handler(const uint8_t *mac_addr, const uint8_t *data, int len);
-
-constexpr int MOTOR_PIN_1 = 4;
-constexpr int MOTOR_PIN_1_chan = 0;
-constexpr int MOTOR_PIN_1_freq = 2000; //Hz
-
-
-TaskHandle_t Command_Task_ID;
-TaskHandle_t Telemetry_Task_ID;
-TaskHandle_t Motor_Task_ID;
+void Get_Telem_Task(void *pvParams);
+void Command_Received_Handler(const uint8_t *mac_address, const uint8_t *data, int len);
 
 struct packet{
-  uint8_t packet_type = 0;
-  uint8_t command_type = 0;
+  uint8_t mac_addr[6];
+  uint8_t command_type;
+  uint8_t battery_life;
+  uint8_t roll_angle;
+  uint8_t pitch_angle;
+  uint8_t yaw_angle;
+
 };
 
 enum Command{
@@ -29,20 +26,24 @@ enum Command{
   HALT_COMMAND = 'h'
 };
 
-enum Packet_Type{
-  COMMAND,
-  TELEMETRY
-};
+
+packet telemetry_sent = {};
+packet command_received = {};
+
+TaskHandle_t Execute_Command_Task_ID;
+TaskHandle_t Send_Telemetry_Task_ID;
+TaskHandle_t Motor_Task_ID;
+TaskHandle_t Get_Telem_Task_ID;
+
+QueueHandle_t Command_Queue_ID = xQueueCreate(10, sizeof(command_received));
+QueueHandle_t Telemetry_Queue_ID = xQueueCreate(10, sizeof(telemetry_sent));
+
+uint8_t BASE_STATION_MAC_ADDR[6] = {0x30, 0x76, 0xF5, 0xB9, 0xE2, 0x94};
 
 
-packet telemetry_structure;
-packet telemetry_sent;
-packet command_received;
-
-uint8_t BASE_STATION_MAC_ADDR[6] = {0x30,0x76,0xF5,0xB9,0xE2,0x94};
-
-QueueHandle_t Packet_Queue_ID = xQueueCreate(10, sizeof(command_received));
-
+constexpr int MOTOR_PIN_1 = 4;
+constexpr int MOTOR_PIN_1_chan = 0;
+constexpr int MOTOR_PIN_1_freq = 2000; //Hz
 uint8_t motor_status = START_COMMAND;
 
 void setup() {
@@ -63,7 +64,6 @@ peerInfo.ifidx = WIFI_IF_STA;
 
 esp_now_add_peer(&peerInfo);
 
-
 Serial.println("=================");
 Serial.println("UGV MAC Address: ");
 Serial.println(WiFi.macAddress());
@@ -79,37 +79,48 @@ ledcWrite(MOTOR_PIN_1_chan, 127);
 
 //Task setup
 constexpr configSTACK_DEPTH_TYPE STACK_SIZE_BYTES = 4096;
-
-constexpr UBaseType_t COMMAND_TASK_PRIORITY = 5; 
-constexpr UBaseType_t TELEMETRY_TASK_PRIORITY = 5;
+constexpr void *NO_TASK_PARAMS = nullptr;
+constexpr UBaseType_t EXECUTE_COMMAND_TASK_PRIORITY = 8; 
+constexpr UBaseType_t SEND_TELEMETRY_TASK_PRIORITY = 6;
 constexpr UBaseType_t MOTOR_TASK_PRIORITY = 8;
-
+constexpr UBaseType_t GET_TELEM_TASK_PRIORITY = 5;
   
+
 xTaskCreate(
-  Command_Task,
-  "Command Task",
+  Execute_Command_Task,
+  "Execute Command Task",
   STACK_SIZE_BYTES,
-  nullptr,
-  COMMAND_TASK_PRIORITY,
-  &Command_Task_ID
+  NO_TASK_PARAMS,
+  EXECUTE_COMMAND_TASK_PRIORITY,
+  &Execute_Command_Task_ID
   );
 
 xTaskCreate(
-  Telemetry_Task,
-  "Telemetry Task",
+  Send_Telemetry_Task,
+  "Send Telemetry Task",
   STACK_SIZE_BYTES,
-  nullptr,
-  TELEMETRY_TASK_PRIORITY,
-  &Telemetry_Task_ID
+  NO_TASK_PARAMS,
+  SEND_TELEMETRY_TASK_PRIORITY,
+  &Send_Telemetry_Task_ID
 );
 
 xTaskCreate(
   Motor_Task,
   "Motor Task",
   STACK_SIZE_BYTES,
-  nullptr,
+  NO_TASK_PARAMS,
   MOTOR_TASK_PRIORITY,
   &Motor_Task_ID
+);
+
+
+xTaskCreate(
+  Get_Telem_Task,
+  "Get Telem Task",
+  STACK_SIZE_BYTES,
+  NO_TASK_PARAMS,
+  GET_TELEM_TASK_PRIORITY,
+  &Get_Telem_Task_ID
 );
 
 }
@@ -121,17 +132,19 @@ void loop() {
 }
 
 
-void Command_Task(void *pvParams){
+void Execute_Command_Task(void *pvParams){
     for(;;){
-      xQueueReceive(Packet_Queue_ID, &command_received, portMAX_DELAY);
+      xQueueReceive(Command_Queue_ID, &command_received, portMAX_DELAY);
       motor_status = command_received.command_type;
       vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 }
 
-void Telemetry_Task(void *pvParams){
+void Send_Telemetry_Task(void *pvParams){
     for(;;){
+      xQueueReceive(Telemetry_Queue_ID, &telemetry_sent, portMAX_DELAY);
+      esp_now_send(BASE_STATION_MAC_ADDR,(uint8_t *)&telemetry_sent, sizeof(telemetry_sent));
       vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
@@ -158,13 +171,28 @@ void Motor_Task(void *pvParams){
 
 }
 
-void Command_Received_Handler(const uint8_t *mac_addr, const uint8_t* data, int len){
+void Get_Telem_Task(void *pvParams){
+for(;;){
+  telemetry_sent.battery_life += 1;
+  telemetry_sent.roll_angle += 1;
+  telemetry_sent.pitch_angle += 1;
+  telemetry_sent.yaw_angle += 1;
+  xQueueSend(Telemetry_Queue_ID, &telemetry_sent, portMAX_DELAY);
+  vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
+}
+
+void Command_Received_Handler(const uint8_t *mac_address, const uint8_t* data, int len){
 
 if (len!=sizeof(command_received)){
   return;
 }
 
 memcpy(&command_received, data, len);
-xQueueSend(Packet_Queue_ID, &command_received, 0);
+xQueueSend(Command_Queue_ID, &command_received, 0);
 
 }
+
+
+
