@@ -60,7 +60,7 @@ For the base station, I chose to avoid the loop task and instead used my own tas
 
 - Telemetry Task (UGV and Base Station): This task will periodically trigger to send a telemetry message from the telemetry queue (UGV) or read a telemetry message from the telemetry queue (Base Station)
 
-- Motor Control Task (UGV): This is a task that periodically checks a global status flag to enable or disable.
+- Motor Control Task (UGV): This is a task that periodically checks a global status flag to enable or disable motors.
 
 - WiFi Task (Built-In Task)(UGV and Base Station): Upon arrival of newly received data, the WiFi task will execute the callback function and read this data. Since ESP-NOW documentation states that the WiFi task runs at a high priority, the amount of work performed in this task should be minimized to give other tasks runtime [2]. That means the Wi-Fi task should only be reading messages and storing them, rather than reading messages and executing heavy logic thereafter. This is being done in our base station implementation by using queues to store messages and separate tasks to execute commands or display telemetry from these queues.
 
